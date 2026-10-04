@@ -117,7 +117,7 @@ onMounted(load)
           <td>{{ row.loftName }}</td>
           <td>{{ row.rollCode }}</td>
           <td><span class="badge" :class="'badge-' + row.status">{{
-            row.status === 'cured' ? statusLabel.dipping : (statusLabel[row.status] || row.status)
+            statusLabel[row.status] || row.status
           }}</span></td>
           <td>{{ row.fabricWeightGsm }}</td>
           <td>{{ row.notes }}</td>

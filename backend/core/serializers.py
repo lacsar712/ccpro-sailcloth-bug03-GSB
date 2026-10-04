@@ -50,13 +50,24 @@ class ClothRollSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"rollCode": "同一帆布间卷号必须唯一"})
 
         new_status = attrs.get("status")
-        if new_status == ClothRoll.STATUS_CURED:
-            roll = self.instance
-            if roll is None:
+        if new_status == ClothRoll.STATUS_CURED and self.instance is None:
+            raise serializers.ValidationError({"status": "新建布卷不能直接设为已固化"})
+        if new_status is not None and self.instance is not None:
+            # 已固化是终态：固化后只能保持已固化，不能退回原布/浸渍中
+            if (
+                self.instance.status == ClothRoll.STATUS_CURED
+                and new_status != ClothRoll.STATUS_CURED
+            ):
                 raise serializers.ValidationError(
-                    {"status": "新建布卷不能直接设为已固化"}
+                    {"status": "布卷已固化，卷态锁定，不能退回浸渍中或原布"}
                 )
-            # 合并未提交字段到临时视角：用当前实例校验
+        if (
+            new_status == ClothRoll.STATUS_CURED
+            and self.instance is not None
+            and self.instance.status != ClothRoll.STATUS_CURED
+        ):
+            roll = self.instance
+            # 转入已固化：最近浸渍固化时长必须 ≥ 12 小时
             ok, msg = can_mark_roll_cured(roll)
             if not ok:
                 raise serializers.ValidationError({"status": msg})
@@ -93,3 +104,20 @@ class DipRunSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("id", "rollCode", "loftName", "created_at")
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            # 更新时取目标卷（PUT 允许换卷）：所属或目标卷已固化即冻结
+            target_roll = attrs.get("roll") or self.instance.roll
+            if target_roll.status == ClothRoll.STATUS_CURED:
+                raise serializers.ValidationError(
+                    {"cureHours": "该布卷已固化，固化时长已锁定，不能再修改"}
+                )
+        else:
+            # 已固化卷不能补登新浸渍（否则会顶掉最近一条、动摇固化依据）
+            roll = attrs.get("roll")
+            if roll is not None and roll.status == ClothRoll.STATUS_CURED:
+                raise serializers.ValidationError(
+                    {"rollId": "该布卷已固化，不能再补登浸渍记录"}
+                )
+        return attrs

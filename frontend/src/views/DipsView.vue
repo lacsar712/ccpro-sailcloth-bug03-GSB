@@ -48,7 +48,12 @@ async function create() {
     form.startedAt = localNow()
     await load()
   } catch (e) {
-    error.value = e.response?.data?.detail || JSON.stringify(e.response?.data) || '创建失败'
+    const data = e.response?.data
+    error.value =
+      data?.rollId?.[0] ||
+      data?.cureHours?.[0] ||
+      data?.detail ||
+      (data ? JSON.stringify(data) : '创建失败')
   }
 }
 

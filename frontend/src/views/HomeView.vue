@@ -12,6 +12,19 @@ const panelBusy = ref(false)
 
 const statusLabel = { raw: '原布', dipping: '浸渍中', cured: '已固化' }
 
+function firstError(data, fallback) {
+  if (!data) return fallback
+  if (typeof data === 'string') return data
+  // DRF 字段级报错：{ cureHours: ['…'] } / { status: ['…'] }
+  for (const key of ['cureHours', 'rollId', 'status', 'detail']) {
+    if (Array.isArray(data[key]) && data[key].length) return data[key][0]
+  }
+  for (const v of Object.values(data)) {
+    if (Array.isArray(v) && v.length) return v[0]
+  }
+  return fallback
+}
+
 const dipForm = reactive({
   startedAt: '',
   resinPct: 28,
@@ -26,6 +39,7 @@ function localNow() {
 }
 
 const selected = computed(() => rolls.value.find((r) => r.id === selectedId.value) || null)
+const isCured = computed(() => selected.value?.status === 'cured')
 
 const rollsByLoft = computed(() => {
   return lofts.value.map((loft) => ({
@@ -92,6 +106,7 @@ async function setStatus(status) {
 async function saveHours() {
   const latest = selectedDips.value[0]
   if (!latest || !selected.value) return
+  if (isCured.value) return
   panelError.value = ''
   panelBusy.value = true
   try {
@@ -104,14 +119,14 @@ async function saveHours() {
     })
     await load()
   } catch (e) {
-    panelError.value = e.response?.data?.detail || '改时长失败'
+    panelError.value = firstError(e.response?.data, '改时长失败')
   } finally {
     panelBusy.value = false
   }
 }
 
 async function logDip() {
-  if (!selected.value) return
+  if (!selected.value || isCured.value) return
   panelError.value = ''
   panelBusy.value = true
   try {
@@ -138,9 +153,10 @@ async function logDip() {
     await load()
   } catch (e) {
     panelError.value =
-      e.response?.data?.detail ||
-      JSON.stringify(e.response?.data) ||
-      '登记浸渍失败'
+      firstError(
+        e.response?.data,
+        '登记浸渍失败（若该卷已固化，时长与卷态均已锁定）',
+      )
   } finally {
     panelBusy.value = false
   }
@@ -238,7 +254,7 @@ onMounted(load)
         <button
           class="btn secondary"
           type="button"
-          :disabled="panelBusy || selected.status === 'raw'"
+          :disabled="panelBusy || selected.status === 'raw' || isCured"
           @click="setStatus('raw')"
         >
           标为原布
@@ -246,7 +262,7 @@ onMounted(load)
         <button
           class="btn secondary"
           type="button"
-          :disabled="panelBusy || selected.status === 'dipping'"
+          :disabled="panelBusy || selected.status === 'dipping' || isCured"
           @click="setStatus('dipping')"
         >
           标为浸渍中
@@ -264,19 +280,25 @@ onMounted(load)
       <form class="drawer-form" @submit.prevent="logDip">
         <h3>登记浸渍</h3>
         <label>开始时间
-          <input v-model="dipForm.startedAt" type="datetime-local" required />
+          <input v-model="dipForm.startedAt" type="datetime-local" required :disabled="isCured" />
         </label>
         <label>树脂 %
-          <input v-model.number="dipForm.resinPct" type="number" step="0.1" required />
+          <input v-model.number="dipForm.resinPct" type="number" step="0.1" required :disabled="isCured" />
         </label>
-        <label>固化时长 h（可空，已固化也可改）
-          <input v-model="dipForm.cureHours" type="number" step="0.1" />
+        <label>固化时长 h（可空{{ isCured ? '；已固化后锁定' : '' }}）
+          <input v-model="dipForm.cureHours" type="number" step="0.1" :disabled="isCured" />
         </label>
-        <button class="btn secondary" type="button" :disabled="panelBusy" @click="saveHours">只改时长</button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="panelBusy || isCured"
+          @click="saveHours"
+        >只改时长</button>
         <label>备注
-          <input v-model="dipForm.notes" />
+          <input v-model="dipForm.notes" :disabled="isCured" />
         </label>
-        <button class="btn" type="submit" :disabled="panelBusy">写入浸渍记录</button>
+        <button class="btn" type="submit" :disabled="panelBusy || isCured">写入浸渍记录</button>
+        <p v-if="isCured" class="hint">该卷已固化：时长与卷态均已锁定，如需改动请联系管理员。</p>
       </form>
 
       <div class="drawer-history">
