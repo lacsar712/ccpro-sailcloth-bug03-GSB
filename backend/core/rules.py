@@ -13,6 +13,16 @@ def latest_dip_run(roll: ClothRoll) -> DipRun | None:
     return roll.dip_runs.order_by("-started_at", "-id").first()
 
 
+def can_write_cure_hours(roll: ClothRoll) -> tuple[bool, str]:
+    """
+    布卷一旦「已固化」(cured)，其固化时长封存：
+    任何浸渍记录都不得再写入或修改固化时长。
+    """
+    if roll.status == ClothRoll.STATUS_CURED:
+        return False, "布卷已固化，固化时长不可再修改"
+    return True, ""
+
+
 def can_mark_roll_cured(roll: ClothRoll) -> tuple[bool, str]:
     """
     布卷转为「已固化」(cured) 的前提：

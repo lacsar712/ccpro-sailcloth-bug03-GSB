@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import ClothRoll, DipRun, Loft
-from .rules import can_mark_roll_cured
+from .rules import can_mark_roll_cured, can_write_cure_hours
 
 
 class LoftSerializer(serializers.ModelSerializer):
@@ -93,3 +93,20 @@ class DipRunSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("id", "rollCode", "loftName", "created_at")
+
+    def validate(self, attrs):
+        # 已固化布卷的固化时长封存：补写(PATCH)与新建(POST)两条路都不得再写入。
+        if "cure_hours" in attrs:
+            current = self.instance.cure_hours if self.instance else None
+            if attrs["cure_hours"] != current:
+                rolls_to_check = []
+                if self.instance is not None:
+                    rolls_to_check.append(self.instance.roll)
+                target_roll = attrs.get("roll")
+                if target_roll is not None and target_roll not in rolls_to_check:
+                    rolls_to_check.append(target_roll)
+                for roll in rolls_to_check:
+                    ok, msg = can_write_cure_hours(roll)
+                    if not ok:
+                        raise serializers.ValidationError({"cureHours": msg})
+        return attrs

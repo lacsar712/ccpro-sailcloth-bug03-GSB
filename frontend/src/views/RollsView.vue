@@ -116,9 +116,7 @@ onMounted(load)
         <tr v-for="row in rolls" :key="row.id">
           <td>{{ row.loftName }}</td>
           <td>{{ row.rollCode }}</td>
-          <td><span class="badge" :class="'badge-' + row.status">{{
-            row.status === 'cured' ? statusLabel.dipping : (statusLabel[row.status] || row.status)
-          }}</span></td>
+          <td><span class="badge" :class="'badge-' + row.status">{{ statusLabel[row.status] || row.status }}</span></td>
           <td>{{ row.fabricWeightGsm }}</td>
           <td>{{ row.notes }}</td>
           <td><button class="btn secondary" type="button" @click="startEdit(row)">编辑</button></td>

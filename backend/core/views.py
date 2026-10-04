@@ -31,13 +31,6 @@ class DipRunViewSet(viewsets.ModelViewSet):
     serializer_class = DipRunSerializer
     http_method_names = ["get", "post", "patch", "put", "head", "options"]
 
-    def perform_update(self, serializer):
-        instance = serializer.save()
-        roll = instance.roll
-        if roll.status == ClothRoll.STATUS_CURED:
-            roll.status = ClothRoll.STATUS_DIPPING
-            roll.save(update_fields=["status"])
-
     def get_queryset(self):
         qs = DipRun.objects.select_related("roll", "roll__loft").all()
         roll_id = self.request.query_params.get("rollId")

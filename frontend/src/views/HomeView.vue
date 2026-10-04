@@ -41,6 +41,15 @@ const selectedDips = computed(() => {
 
 const recentFeed = computed(() => dips.value.slice(0, 12))
 
+function errText(data, fallback) {
+  if (!data) return fallback
+  if (typeof data === 'string') return data
+  const first = Object.values(data)[0]
+  if (Array.isArray(first)) return first[0]
+  if (typeof first === 'string') return first
+  return fallback
+}
+
 async function load() {
   error.value = ''
   try {
@@ -79,11 +88,10 @@ async function setStatus(status) {
     await api.patch(`/rolls/${selected.value.id}/`, { status })
     await load()
   } catch (e) {
-    const data = e.response?.data
-    panelError.value =
-      data?.status?.[0] ||
-      data?.detail ||
+    panelError.value = errText(
+      e.response?.data,
       '状态更新失败（标「已固化」需最近浸渍固化时长 ≥ 12 小时）'
+    )
   } finally {
     panelBusy.value = false
   }
@@ -92,6 +100,10 @@ async function setStatus(status) {
 async function saveHours() {
   const latest = selectedDips.value[0]
   if (!latest || !selected.value) return
+  if (selected.value.status === 'cured') {
+    panelError.value = '布卷已固化，固化时长不可再修改'
+    return
+  }
   panelError.value = ''
   panelBusy.value = true
   try {
@@ -104,7 +116,7 @@ async function saveHours() {
     })
     await load()
   } catch (e) {
-    panelError.value = e.response?.data?.detail || '改时长失败'
+    panelError.value = errText(e.response?.data, '改时长失败')
   } finally {
     panelBusy.value = false
   }
@@ -137,10 +149,7 @@ async function logDip() {
     dipForm.startedAt = localNow()
     await load()
   } catch (e) {
-    panelError.value =
-      e.response?.data?.detail ||
-      JSON.stringify(e.response?.data) ||
-      '登记浸渍失败'
+    panelError.value = errText(e.response?.data, '登记浸渍失败')
   } finally {
     panelBusy.value = false
   }
@@ -269,10 +278,20 @@ onMounted(load)
         <label>树脂 %
           <input v-model.number="dipForm.resinPct" type="number" step="0.1" required />
         </label>
-        <label>固化时长 h（可空，已固化也可改）
-          <input v-model="dipForm.cureHours" type="number" step="0.1" />
+        <label>固化时长 h（可空，已固化后不可改）
+          <input
+            v-model="dipForm.cureHours"
+            type="number"
+            step="0.1"
+            :disabled="selected.status === 'cured'"
+          />
         </label>
-        <button class="btn secondary" type="button" :disabled="panelBusy" @click="saveHours">只改时长</button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="panelBusy || selected.status === 'cured'"
+          @click="saveHours"
+        >只改时长</button>
         <label>备注
           <input v-model="dipForm.notes" />
         </label>
